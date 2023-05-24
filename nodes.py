@@ -1,11 +1,13 @@
 import numpy as np
 import math
 from random import random
+
 # NODES TO MAKE
 # Kill Node (send bacteriophages) (output)
 # Is getting killed (input)
+# Consume Node (consumes food or biomass) (output)
 # population stimulus (input)
-# defend (defense for kill node 50% chance to work.)
+# CAS19 (defense for kill node 50% chance to work.)
 
 # WEIGHTS (LITTERALY NUMBERS) #
 
@@ -28,21 +30,18 @@ from random import random
 
 
 class eyesight:
-
     def __init__(self, eyesightStrength, x, y, cellsLoc):
         self.value = 0.0
         # in this case strength == theta
         self.biomassLoc = cellsLoc
         self.seenCells = []
-        self.strengtha = (90 + (eyesightStrength * 25))
-        self.strengthb = (90 - (eyesightStrength * 25))
+        self.strengtha = 90 + (eyesightStrength * 25)
+        self.strengthb = 90 - (eyesightStrength * 25)
         self.cellX = x
         self.cellY = y
         self.carnivoreRate = random()
-        self.radius = (eyesightStrength*15)
+        self.radius = eyesightStrength * 15
         self.cellsLoc = cellsLoc
-        print(self.strengtha)
-        print(self.strengthb)
 
     def rotateL(self):
         self.strengtha += 5
@@ -59,15 +58,15 @@ class eyesight:
         # (x,y)=(12∗sin(115),12∗cos(115))
         self.cellview = self.cellY + self.radius
 
-        self.pointa = (self.radius * (math.cos(math.radians(self.strengtha))),
-                       (self.radius * math.sin(math.radians(self.strengtha))))
-        self.pointb = ((math.cos(math.radians(self.strengthb))),
-                       (self.radius * math.sin(math.radians(self.strengthb))))
+        self.pointa = (
+            self.radius * (math.cos(math.radians(self.strengtha))),
+            (self.radius * math.sin(math.radians(self.strengtha))),
+        )
+        self.pointb = (
+            (math.cos(math.radians(self.strengthb))),
+            (self.radius * math.sin(math.radians(self.strengthb))),
+        )
 
-        print(round((self.pointa[0]), 2), round(self.pointa[1], 2))
-        print(round(self.pointb[0], 2), round(self.pointb[1], 2))
-        print(self.cellX)
-        print(self.cellY)
         # self.cellsLoc = [[0,0], [3,3], [10,7]]
 
         # fixed Inverse Tan function, was producing wrong result.
@@ -78,19 +77,16 @@ class eyesight:
         # then convert from radians to degrees.
 
         for i in self.cellsLoc:
-            self.Cellangle = math.degrees(math.atan2(
-                (i[1] - self.cellY), (i[0] - self.cellX)))
-            print("CURRENT CELL EVALUTATION")
-            print(i)
-            print("CELL ANGLE")
-            print(self.Cellangle)
-            print("STRENGTHS")
-            print(self.strengtha, self.strengthb)
-            print("RADIUS")
-            print(self.radius)
-            print("\n\n")
-            if (((self.Cellangle <= self.strengtha) and (self.Cellangle >= self.strengthb))):
-                if (math.sqrt((i[0]-self.cellX)**2 + (i[1]-self.cellY)**2) <= self.radius):
+            self.Cellangle = math.degrees(
+                math.atan2((i.cellY - self.cellY), (i.cellX - self.cellX))
+            )
+            if (self.Cellangle <= self.strengtha) and (
+                self.Cellangle >= self.strengthb
+            ):
+                if (
+                    math.sqrt((i.cellX - self.cellX) ** 2 + (i.cellY - self.cellY) ** 2)
+                    <= self.radius
+                ):
                     self.seenCells.append(i)
 
         return self.sigmoid(len(self.seenCells))
@@ -116,19 +112,23 @@ class Touch:
 
     def getinput(self):
         for i in self.cellsLoc:
-            if ((i[0] >= (self.cellX-1)) and (i[0] <= (self.cellX+1))) and ((i[1] >= (self.cellY-1)) and ((i[1] <= self.cellY + 1))):
+            if ((i.cellX >= (self.cellX - 1)) and (i.cellX <= (self.cellX + 1))) and (
+                (i.cellY >= (self.cellY - 1)) and ((i.cellY <= self.cellY + 1))
+            ):
                 self.TouchingCells.append((self.cellX, self.cellY))
         return len(self.TouchingCells)
 
 
 class Consume:
-    def __init__(self, inputWeight):
+    def __init__(self, inputWeight, weight):
         self.inputweight = inputWeight
-        self.randomMultiplier = random()
-        self.randomAdder = random()
+        if not weight:
+            self.weight = random()
+        else:
+            self.weight = weight
 
     def activate(self):
-        return self.sigmoid(self.inputweight * self.randomMultiplier)
+        return self.sigmoid(self.inputweight * self.weight)
 
     def sigmoid(self, x):
         # Sigmoid activation function
@@ -136,27 +136,53 @@ class Consume:
 
 
 class RotationR:
-    def __init__(self, incoming_weights):
-        self.weight = random()
+    def __init__(self, incoming_weights, weight):
+        if not weight:
+            self.weight = random()
+        else:
+            self.weight = weight
         self.incoming_weights = incoming_weights * self.weight
 
+    def sigmoid(self, x):
+        # Sigmoid activation function
+        return 1 / (1 + np.exp(-x))
+
+    def mutate(self, mutationRate):
+        self.weight += mutationRate
+
     def activate(self):
-        return self.incoming_weights
+        return self.sigmoid(self.incoming_weights)
 
 
 class RotationL:
-    def __init__(self, incoming_weights, ):
-        self.weight = random()
+    def __init__(self, incoming_weights, weight):
+        if not weight:
+            self.weight = random()
+        else:
+            self.weight = weight
         self.incoming_weights = incoming_weights * self.weight
 
+    def sigmoid(self, x):
+        # Sigmoid activation function
+        return 1 / (1 + np.exp(-x))
+
+    def mutate(self, mutationRate):
+        self.weight += mutationRate
+
     def activate(self):
-        return self.incoming_weights
+        return self.sigmoid(self.incoming_weights)
 
 
 class MoveF:
-    def __init__(self, incoming_weight):
+    def __init__(self, incoming_weight, weight):
         self.incoming_weight = incoming_weight
-        self.weight = random()
+        if not weight:
+            self.weight = random()
+        else:
+            self.weight = weight
+
+    def mutate(self, mutationRate):
+        self.weight += mutationRate
 
     def sigmoid(self, x):
         # Sigmoid activation function
@@ -167,9 +193,15 @@ class MoveF:
 
 
 class MoveB:
-    def __init__(self, incoming_weight):
+    def __init__(self, incoming_weight, weight):
         self.incoming_weight = incoming_weight
-        self.weight = random()
+        if not weight:
+            self.weight = random()
+        else:
+            self.weight = weight
+
+    def mutate(self, mutationRate):
+        self.weight += mutationRate
 
     def sigmoid(self, x):
         # Sigmoid activation function
@@ -180,9 +212,15 @@ class MoveB:
 
 
 class MoveR:
-    def __init__(self, incoming_weight):
+    def __init__(self, incoming_weight, weight):
         self.incoming_weight = incoming_weight
-        self.weight = random()
+        if not weight:
+            self.weight = random()
+        else:
+            self.weight = weight
+
+    def mutate(self, mutationRate):
+        self.weight += mutationRate
 
     def sigmoid(self, x):
         # Sigmoid activation function
@@ -193,9 +231,15 @@ class MoveR:
 
 
 class MoveL:
-    def __init__(self, incoming_weight):
+    def __init__(self, incoming_weight, weight):
         self.incoming_weight = incoming_weight
-        self.weight = random()
+        if not weight:
+            self.weight = random()
+        else:
+            self.weight = weight
+
+    def mutate(self, mutationRate):
+        self.weight += mutationRate
 
     def sigmoid(self, x):
         # Sigmoid activation function
@@ -206,11 +250,17 @@ class MoveL:
 
 
 class HiddenNode:
-
-    def __init__(self, incoming_connections):
+    def __init__(self, incoming_connections, weight):
         self.value = 0.0
+        if not weight:
+            self.weight = random()
+        else:
+            self.weight = weight
         self.incoming_connections = incoming_connections
         self.weight = random()
+
+    def mutate(self, mutationRate):
+        self.weight += mutationRate
 
     def activate(self):
         # Apply the activation function to calculate the node's output value
@@ -220,8 +270,6 @@ class HiddenNode:
     def get_input_sum(self):
         # Calculate the sum of the inputs from the incoming connections
         input_sum = 0.0
-        print(self.incoming_connections)
-        print(self.weight)
         input_sum += self.incoming_connections * self.weight
         return input_sum
 
@@ -231,9 +279,10 @@ class HiddenNode:
 
 
 class OutputNode:
-
-    def __init__(self, incoming_connections):
+    def __init__(self, incoming_connections, weight):
         self.value = 0.0
+        if not weight:
+            self.weight = random()
         self.incoming_connections = incoming_connections
 
     def activate(self):
