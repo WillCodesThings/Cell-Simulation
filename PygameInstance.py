@@ -6,7 +6,6 @@ import base64
 import math
 
 # Define the Cell class
-GENOMELENGTH = 3
 width, height = 500, 500
 
 
@@ -31,8 +30,8 @@ class Cell(pygame.sprite.Sprite):
         self.image.fill(self.cellColor)
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
-        self.canvas_width = width
-        self.canvas_height = height
+        self.screen_width = width
+        self.screen_height = height
         self.cellNum = cellNumber
         self.cellX = self.rect.center[0]
         self.cellY = self.rect.center[1]
@@ -44,6 +43,7 @@ class Cell(pygame.sprite.Sprite):
         self.genomeLength = genomeLength
         self.offspring = offspring
         self.reproduced = False
+        self.reproduction_counter = 0
 
     def returnGenes(self):
         return self.NN.returnGenome()
@@ -56,8 +56,8 @@ class Cell(pygame.sprite.Sprite):
             min(self.cellColor[2] + 1, 255),
         )
         newCell = Cell(
-            random.randint(0, width - cell_size),
-            random.randint(0, width - cell_size),
+            random.randint(0, width - self.cellSize),
+            random.randint(0, width - self.cellSize),
             self.cellSize,
             new_color,
             width,
@@ -65,7 +65,7 @@ class Cell(pygame.sprite.Sprite):
             len(cells) + 1,
             self.genomeLength,
             NN,
-            self.energy - 0.6,
+            self.energy,
             True,
         )
         all_sprites.add(newCell)
@@ -73,12 +73,20 @@ class Cell(pygame.sprite.Sprite):
         self.energy -= 1
 
     def update(self, cells, biomassLoc):
+        if self.reproduction_counter >= 150 and self.offspring:
+            self.offspring = False
         self.mutationRate = random.random()
         # Move the cell randomly
+        self.energy -= 0.001
         if self.energy <= 0:
             all_sprites.remove(self)
-        elif self.energy > 1 and not self.reproduced and not self.NN == None:
-            self.reproduce(0.2, self.NN, cells)
+        elif (
+            self.energy > 1
+            and not self.reproduced
+            and not self.NN == None
+            and not self.offspring
+        ):
+            self.reproduce(simulation_options[4]["value"], self.NN, cells)
             self.reproduced = True
         TouchingCellss = []
         if self.NN == None:
@@ -106,14 +114,29 @@ class Cell(pygame.sprite.Sprite):
         currentChoiceOfNetwork = self.NN.feedForeward()
         distanceofcells = []
         if isinstance(currentChoiceOfNetwork[0], nodes.Consume):
-            if self.NN.carnivoreRate >= 0.6:
+            if self.NN.carnivoreRate >= simulation_options[5]["value"]:
                 for i in cells:
                     if (
-                        (i.rect.x >= (self.cellX - ((self.cellSize) ** 2)))
-                        and (i.rect.x <= (self.cellX + ((self.cellSize) ** 2)))
+                        (
+                            i.rect.x
+                            >= (self.cellX - (self.cellSize * 2 + (self.cellSize / 2)))
+                        )
+                        and (
+                            i.rect.x
+                            <= (self.cellX + (self.cellSize * 2 + (self.cellSize / 2)))
+                        )
                     ) and (
-                        (i.rect.y >= (self.cellY - ((self.cellSize) ** 2)))
-                        and ((i.rect.y <= self.cellY + ((self.cellSize) ** 2)))
+                        (
+                            i.rect.y
+                            >= (self.cellY - (self.cellSize * 2 + (self.cellSize / 2)))
+                        )
+                        and (
+                            (
+                                i.rect.y
+                                <= self.cellY
+                                + (self.cellSize * 2 + (self.cellSize / 2))
+                            )
+                        )
                     ):
                         if self.cellNum != i.cellNum:
                             TouchingCellss.append((self.cellX, self.cellY, i.cellNum))
@@ -130,7 +153,7 @@ class Cell(pygame.sprite.Sprite):
                     try:
                         if (
                             h.cellNum
-                            != TouchingCellss.index(
+                            == TouchingCellss.index(
                                 distanceofcells.index(min(distanceofcells))
                             )[2]
                         ):
@@ -143,9 +166,9 @@ class Cell(pygame.sprite.Sprite):
             else:
                 for i in biomassLoc:
                     distance = math.sqrt(
-                        ((self.cellX - i.rect.x) ** 2) + ((self.cellY - i.rect.y) ** 2)
+                        ((i.rect.x - self.cellX) ** 2) + ((i.rect.y - self.cellY) ** 2)
                     )
-                    if distance <= 20:
+                    if distance <= (self.cellSize * 2 + self.cellSize / 2):
                         distanceofcells.append((distance, i))
                 for h in biomass_sprites:
                     try:
@@ -155,6 +178,8 @@ class Cell(pygame.sprite.Sprite):
                                 distanceofcells.index(min(distanceofcells))
                             )[2]
                         ):
+                            print(h.cellNum)
+                            print(distanceofcells)
                             biomass_sprites.remove(h)
                             biomass.remove(h)
                             self.energy += 0.2
@@ -190,10 +215,10 @@ class Cell(pygame.sprite.Sprite):
                 self.energy -= 0.001
             except:
                 pass
-
-        # Ensure the cell stays within the canvas boundaries
-        self.rect.x = max(0, min(self.rect.x, self.canvas_width - self.rect.width))
-        self.rect.y = max(0, min(self.rect.y, self.canvas_height - self.rect.height))
+        self.reproduction_counter += 1
+        # Ensure the cell stays within the screen boundaries
+        self.rect.x = max(0, min(self.rect.x, self.screen_width - self.rect.width))
+        self.rect.y = max(0, min(self.rect.y, self.screen_height - self.rect.height))
 
         # Check for collisions with other cells
         for cell in cells:
@@ -246,41 +271,39 @@ class Biomass(pygame.sprite.Sprite):
 
 # Initialize Pygame
 pygame.init()
+width, height = 800, 600
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("Cell Simulation")
 
-# Set up the canvas
-
-canvas = pygame.display.set_mode((width, height))
-pygame.display.set_caption("Seeing Life -- WillCodesThings")
 
 # Create a group for all sprites
 all_sprites = pygame.sprite.Group()
 biomass_sprites = pygame.sprite.Group()
 
 # Create the cells
-num_cells = 250
-cell_size = 5
-cell_color = (255, 0, 0)  # Red
-
 cells = []
-for _ in range(num_cells):
-    x = random.randint(0, width - cell_size)
-    y = random.randint(0, height - cell_size)
-    cell = Cell(x, y, cell_size, cell_color, width, height, _ + 1, GENOMELENGTH, None)
-    cells.append(cell)
-    all_sprites.add(cell)
-
-# Create the biomass sprites
-num_biomass = 200
-biomass_size = 3
-biomass_color = (0, 255, 0)  # Green
-
 currentBiomass = []
-for _ in range(num_biomass):
-    x = random.randint(0, width - biomass_size)
-    y = random.randint(0, height - biomass_size)
-    biomass = Biomass(x, y, biomass_size, biomass_color, _ + 1)
-    currentBiomass.append(biomass)
-    biomass_sprites.add(biomass)
+
+
+def createCells(num_cells, cell_size, cell_color, GENOMELENGTH):
+    for _ in range(num_cells):
+        x = random.randint(0, width - cell_size)
+        y = random.randint(0, height - cell_size)
+        cell = Cell(
+            x, y, cell_size, cell_color, width, height, _ + 1, GENOMELENGTH, None
+        )
+        cells.append(cell)
+        all_sprites.add(cell)
+
+
+def addBiomass(num_biomass, biomass_size, biomass_color):
+    for _ in range(num_biomass):
+        x = random.randint(0, width - biomass_size)
+        y = random.randint(0, height - biomass_size)
+        biomass = Biomass(x, y, biomass_size, biomass_color, _ + 1)
+        currentBiomass.append(biomass)
+        biomass_sprites.add(biomass)
+
 
 # Zoom variables
 zoom_center = pygame.Vector2(width // 2, height // 2)
@@ -311,13 +334,13 @@ def GETRAYCAST(x, y, pointa, pointb, eyesightStrength, zoom_factor):
         scaled_radius * 2,
     )
 
-    # Draw the FOV segment on the canvas
+    # Draw the FOV segment on the screen
     pygame.draw.arc(
-        canvas, segment_color, fov_rect, start_point, stop_point, scaled_radius
+        screen, segment_color, fov_rect, start_point, stop_point, scaled_radius
     )
 
 
-def render_ui(selected_cell, canvas, zoom_factor):
+def render_ui(selected_cell, screen, zoom_factor):
     # Define the UI parameters
     ui_font_size = int(16 * zoom_factor)
     ui_width = 200
@@ -353,11 +376,84 @@ def render_ui(selected_cell, canvas, zoom_factor):
 
     # ...
 
-    # Blit the UI surface onto the canvas
-    canvas.blit(ui_surface, (ui_padding, ui_padding))
+    # Blit the UI surface onto the screen
+    screen.blit(ui_surface, (ui_padding, ui_padding))
 
 
-# Selected cell for zooming
+# Set up the fonts
+font = pygame.font.Font(None, 30)
+titlefont = pygame.font.Font(None, 50)
+
+# Set up the colors
+background_color = (255, 255, 255)
+text_color = (0, 0, 0)
+selected_color = (255, 0, 0)
+
+# Set up the home screen options
+home_screen_options = [
+    {"label": "Start Simulation", "selected": False},
+    {"label": "Simulation Options", "selected": False},
+]
+
+# Set up the simulation options
+simulation_options = [
+    {
+        "label": "Num cells",
+        "value": 100,
+        "min_value": 0,
+        "max_value": 1000,
+        "increment": 10,
+    },
+    {
+        "label": "Cell Size",
+        "value": 10,
+        "min_value": 10,
+        "max_value": 30,
+        "increment": 10,
+    },
+    {
+        "label": "Number of Genes",
+        "value": 4,
+        "min_value": 0,
+        "max_value": 10,
+        "increment": 1,
+    },
+    {
+        "label": "Num of Biomass",
+        "value": 200,
+        "min_value": 0,
+        "max_value": 1000,
+        "increment": 10,
+    },
+    {
+        "label": "Mutation Rate",
+        "value": 0.2,
+        "min_value": 0.0,
+        "max_value": 1.0,
+        "increment": 0.1,
+    },
+    {
+        "label": "Carnivore Rate",
+        "value": 0.6,
+        "min_value": 0.0,
+        "max_value": 1.0,
+        "increment": 0.1,
+    },
+    {
+        "label": "Back",
+        "value": "",
+        "min_value": 0.0,
+        "max_value": 1.0,
+        "increment": 0.1,
+    },
+]
+
+# Set up the selected option
+selected_option = 0
+
+# Set up the current screen
+current_screen = "home"
+start = 0
 selected_cell = None
 
 # Set up the clock
@@ -370,90 +466,194 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:  # Left button: Select a cell for zooming
-                for cell in cells:
-                    if cell.rect.collidepoint(event.pos):
-                        selected_cell = cell
-                        cell.selected = True
-            elif event.button == 3:  # Right button: Unzoom
-                selected_cell = None
-                zoom_factor = 1.0
+            sys.exit()
+        elif event.type == pygame.KEYDOWN:
+            if current_screen == "home":
+                if event.key == pygame.K_UP:
+                    selected_option = (selected_option - 1) % len(home_screen_options)
+                elif event.key == pygame.K_DOWN:
+                    selected_option = (selected_option + 1) % len(home_screen_options)
+                elif event.key == pygame.K_RETURN:
+                    current_screen = home_screen_options[selected_option]["label"]
+                    print(current_screen)
+            elif current_screen == "Simulation Options":
+                if event.key == pygame.K_UP:
+                    selected_option = (selected_option - 1) % len(simulation_options)
+                elif event.key == pygame.K_DOWN:
+                    selected_option = (selected_option + 1) % len(simulation_options)
+                elif event.key == pygame.K_LEFT:
+                    simulation_options[selected_option]["value"] = round(
+                        simulation_options[selected_option]["value"]
+                        - simulation_options[selected_option]["increment"],
+                        1,
+                    )
+                    if (
+                        simulation_options[selected_option]["value"]
+                        < simulation_options[selected_option]["min_value"]
+                    ):
+                        simulation_options[selected_option][
+                            "value"
+                        ] = simulation_options[selected_option]["min_value"]
+                elif event.key == pygame.K_RIGHT:
+                    simulation_options[selected_option]["value"] = round(
+                        simulation_options[selected_option]["value"]
+                        + simulation_options[selected_option]["increment"],
+                        1,
+                    )
+                    if (
+                        simulation_options[selected_option]["value"]
+                        > simulation_options[selected_option]["max_value"]
+                    ):
+                        simulation_options[selected_option][
+                            "value"
+                        ] = simulation_options[selected_option]["max_value"]
+                elif event.key == pygame.K_RETURN:
+                    if simulation_options[selected_option]["label"] == "Back":
+                        current_screen = "home"
+            elif current_screen == "Start Simulation":
+                if event.key == pygame.K_ESCAPE:
+                    current_screen = "home"
+                    for i in all_sprites:
+                        all_sprites.remove(i)
+                    for i in cells:
+                        cells.remove(i)
+                    for i in biomass_sprites:
+                        biomass_sprites.remove(i)
+                    for i in currentBiomass:
+                        currentBiomass.remove(i)
+                    start = 0
+    # Clear the screen
+    screen.fill(background_color)
 
-        elif event.type == pygame.MOUSEWHEEL:
-            if selected_cell:
-                if event.y > 0:  # Scroll up: Zoom in
-                    zoom_factor += 0.1
-                else:  # Scroll down: Zoom out
-                    zoom_factor = max(0.1, zoom_factor - 0.1)
-    # Update all sprites
-    all_sprites.update(cells, currentBiomass)
-
-    # Clear the canvas
-    canvas.fill((255, 255, 255))  # White
-
-    # Check if there is a selected cell
-    if selected_cell:
-        # Update zoom center to selected cell's position
-        # Update zoom center to selected cell's position
-        zoom_center = (
-            pygame.Vector2(selected_cell.cellX, selected_cell.cellY) * zoom_factor
+    if current_screen == "home":
+        # Render home screen options
+        title_label = "Cell Simulation"
+        title_text = titlefont.render(title_label, True, text_color)
+        title_rect = title_text.get_rect(
+            x=width // 2 - title_text.get_width() // 2, y=height // 4
         )
+        screen.blit(title_text, title_rect)
+        for i, option in enumerate(home_screen_options):
+            label = option["label"]
+            if i == selected_option:
+                label = "> " + label
+            label_text = font.render(label, True, text_color)
+            label_rect = label_text.get_rect(x=width // 4, y=height // 2 + i * 50)
+            screen.blit(label_text, label_rect)
+            if option["selected"]:
+                pygame.draw.rect(screen, selected_color, label_rect, 2)
+    elif current_screen == "Start Simulation":
+        start += 1
+        if not (start > 1):
+            addBiomass(
+                simulation_options[3]["value"],
+                simulation_options[1]["value"] / 2,
+                (0, 255, 0),
+            )
+            print(simulation_options[2]["value"])
+            createCells(
+                simulation_options[0]["value"],
+                simulation_options[1]["value"],
+                (255, 0, 0),
+                simulation_options[2]["value"],
+            )
+        all_sprites.update(cells, currentBiomass)
 
-        # Update selected cell's position based on zoom
-        selected_cell.rect.center = zoom_center
+        # Clear the screen
+        screen.fill((255, 255, 255))  # White
 
-        # Scale the canvas based on zoom factor
-        scaled_width = int(width * zoom_factor)
-        scaled_height = int(height * zoom_factor)
-        scaled_canvas = pygame.Surface((scaled_width, scaled_height))
-        scaled_rect = scaled_canvas.get_rect(center=zoom_center)
+        # Check if there is a selected cell
+        if selected_cell:
+            # Update zoom center to selected cell's position
+            # Update zoom center to selected cell's position
+            zoom_center = (
+                pygame.Vector2(selected_cell.cellX, selected_cell.cellY) * zoom_factor
+            )
 
-        # Clear the scaled canvas with white color
-        scaled_canvas.fill((255, 255, 255))
+            # Update selected cell's position based on zoom
+            selected_cell.rect.center = zoom_center
 
-        # Draw all sprites on the scaled canvas
-        all_sprites.draw(scaled_canvas)
+            # Scale the screen based on zoom factor
+            scaled_width = int(width * zoom_factor)
+            scaled_height = int(height * zoom_factor)
+            scaled_screen = pygame.Surface((scaled_width, scaled_height))
+            scaled_rect = scaled_screen.get_rect(center=zoom_center)
 
-        # Draw the FOV of the selected cell
-        try:
-            GETRAYCAST(
+            # Clear the scaled screen with white color
+            scaled_screen.fill((255, 255, 255))
+
+            # Draw all sprites on the scaled screen
+            all_sprites.draw(scaled_screen)
+
+            # Draw the FOV of the selected cell
+            try:
+                GETRAYCAST(
+                    selected_cell.cellX,
+                    selected_cell.cellY,
+                    selected_cell.NN.degrees[0],
+                    selected_cell.NN.degrees[1],
+                    selected_cell.NN.randomizedEyesightStrength,
+                    zoom_factor,
+                )
+            except AttributeError:
+                pass
+
+            # Draw the scaled screen on the main screen
+            screen.fill((255, 255, 255))  # Clear the screen with white color
+            screen.blit(scaled_screen, (0, 0), scaled_rect)
+
+            # Reset selected cell's position after drawing
+            selected_cell.rect.center = (
                 selected_cell.cellX,
                 selected_cell.cellY,
-                selected_cell.NN.degrees[0],
-                selected_cell.NN.degrees[1],
-                selected_cell.NN.randomizedEyesightStrength,
-                zoom_factor,
             )
-        except AttributeError:
-            pass
+            if scaled_rect.left < 0:
+                scaled_rect.left = 0
+            if scaled_rect.right > width:
+                scaled_rect.right = width
+            if scaled_rect.top < 0:
+                scaled_rect.top = 0
+            if scaled_rect.bottom > height:
+                scaled_rect.bottom = height
+            selected_cell.selected = False
 
-        # Draw the scaled canvas on the main canvas
-        canvas.fill((255, 255, 255))  # Clear the canvas with white color
-        canvas.blit(scaled_canvas, (0, 0), scaled_rect)
+        else:
+            # Draw all sprites on the main screen
+            screen.fill((255, 255, 255))  # Clear the screen with white color
+            all_sprites.draw(screen)
+        if len(biomass_sprites) <= 150:
+            addBiomass(
+                simulation_options[3]["value"],
+                simulation_options[1]["value"] / 2,
+                (0, 255, 0),
+            )
+        biomass_sprites.draw(screen)
+    elif current_screen == "Simulation Options":
+        # Render title screen
 
-        # Reset selected cell's position after drawing
-        selected_cell.rect.center = (selected_cell.cellX, selected_cell.cellY)
-        if scaled_rect.left < 0:
-            scaled_rect.left = 0
-        if scaled_rect.right > width:
-            scaled_rect.right = width
-        if scaled_rect.top < 0:
-            scaled_rect.top = 0
-        if scaled_rect.bottom > height:
-            scaled_rect.bottom = height
-        selected_cell.selected = False
+        # Render simulation options
+        for i, option in enumerate(simulation_options):
+            label = option["label"]
+            if i == selected_option:
+                label = "> " + label
+            label_text = font.render(label, True, text_color)
+            label_rect = label_text.get_rect(
+                x=width // 4, y=height // 4 + title_rect.height + i * 50
+            )
+            screen.blit(label_text, label_rect)
 
-    else:
-        # Draw all sprites on the main canvas
-        canvas.fill((255, 255, 255))  # Clear the canvas with white color
-        all_sprites.draw(canvas)
-    biomass_sprites.draw(canvas)
-    # render_ui(selected_cell, canvas, zoom_factor)
+            # Render value
+            value = option["value"]
+            value_text = font.render(str(value), True, text_color)
+            value_rect = value_text.get_rect(
+                x=width // 2, y=height // 4 + title_rect.height + i * 50
+            )
+            screen.blit(value_text, value_rect)
+
     # Update the display
     pygame.display.flip()
-    # Limit the frame rate
+    # FPS
     clock.tick(30)
 
-# Quit the game
+# Quit Pygame
 pygame.quit()
